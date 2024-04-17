@@ -130,6 +130,9 @@ namespace RNDocumentPicker
                 };
 
           tcs.SetResult(obj);
+          // TODO: Replace with a more principled solution
+          Windows.Storage.AccessCache.StorageApplicationPermissions.
+                            FutureAccessList.AddOrReplace("pickedFolderToken", folder);
         }
         else
         {
@@ -210,6 +213,10 @@ namespace RNDocumentPicker
 
           tcs.SetResult(jarrayObj);
         }
+        else
+        {
+          tcs.SetResult(new List<JSValueObject>());
+        }
       });
 
       var result = await tcs.Task;
@@ -227,6 +234,10 @@ namespace RNDocumentPicker
         {
           var processedFile = await PrepareFile(file, cache, readContent);
           tcs.SetResult(processedFile);
+        }
+        else
+        {
+          tcs.SetResult(new JSValueObject());
         }
       });
 

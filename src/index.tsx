@@ -1,15 +1,16 @@
-import { Platform, NativeModules } from 'react-native'
+import { Platform, ModalPropsIOS } from 'react-native'
 import invariant from 'invariant'
 import type { PlatformTypes, SupportedPlatforms } from './fileTypes'
 import { perPlatformTypes } from './fileTypes'
+import { NativeDocumentPicker } from './NativeDocumentPicker'
 
 export type DocumentPickerResponse = {
   uri: string
-  fileCopyUri: string
+  name: string | null
   copyError?: string
-  type: string
-  name: string
-  size: number
+  fileCopyUri: string | null
+  type: string | null
+  size: number | null
 }
 
 export const types = perPlatformTypes[Platform.OS]
@@ -18,23 +19,7 @@ export type DirectoryPickerResponse = {
   uri: string
 }
 
-type DocumentPickerType = {
-  pick(options: Record<string, any>): Promise<DocumentPickerResponse[]>
-  releaseSecureAccess(uris: string[]): Promise<void>
-  pickDirectory(): Promise<DirectoryPickerResponse>
-}
-
-const RNDocumentPicker: DocumentPickerType = NativeModules.RNDocumentPicker
-
-if (!RNDocumentPicker) {
-  // Use a timeout to ensure the warning is displayed in the YellowBox
-  setTimeout(() => {
-    console.warn(
-      'RNDocumentPicker: Native module is not available: Either the native module was not properly installed (please follow readme installation instructions)' +
-        "or you're running in a environment without native modules (eg. JS tests in Node). A module mock is not available at this point, contributions are welcome!",
-    )
-  }, 0)
-}
+export type TransitionStyle = 'coverVertical' | 'flipHorizontal' | 'crossDissolve' | 'partialCurl'
 
 export type DocumentPickerOptions<OS extends SupportedPlatforms> = {
   type?:
@@ -44,26 +29,25 @@ export type DocumentPickerOptions<OS extends SupportedPlatforms> = {
   mode?: 'import' | 'open'
   copyTo?: 'cachesDirectory' | 'documentDirectory'
   allowMultiSelection?: boolean
-}
+  transitionStyle?: TransitionStyle
+} & Pick<ModalPropsIOS, 'presentationStyle'>
 
-export function pickDirectory(): Promise<DirectoryPickerResponse | null> {
-  if (Platform.OS === 'android' || Platform.OS === 'windows') {
-    return RNDocumentPicker.pickDirectory()
+export async function pickDirectory<OS extends SupportedPlatforms>(
+  params?: Pick<DocumentPickerOptions<OS>, 'presentationStyle' | 'transitionStyle'>,
+): Promise<DirectoryPickerResponse | null> {
+  if (Platform.OS === 'ios') {
+    const result = await pick({
+      ...params,
+      mode: 'open',
+      allowMultiSelection: false,
+      type: ['public.folder'],
+    })
+    return { uri: result[0].uri }
   } else {
-    // TODO iOS impl
-    return Promise.resolve(null)
+    return NativeDocumentPicker.pickDirectory()
   }
 }
 
-export function pickMultiple<OS extends SupportedPlatforms>(
-  opts?: DocumentPickerOptions<OS>,
-): Promise<DocumentPickerResponse[]> {
-  const options = {
-    ...opts,
-    allowMultiSelection: true,
-  }
-  return pick(options)
-}
 export function pickSingle<OS extends SupportedPlatforms>(
   opts?: DocumentPickerOptions<OS>,
 ): Promise<DocumentPickerResponse> {
@@ -83,19 +67,26 @@ export function pick<OS extends SupportedPlatforms>(
     type: [types.allFiles],
     ...opts,
   }
-  if (!Array.isArray(options.type)) {
-    options.type = [options.type]
+
+  const newOpts: DoPickParams<OS> = {
+    presentationStyle: 'formSheet',
+    transitionStyle: 'coverVertical',
+    ...options,
+    type: Array.isArray(options.type) ? options.type : [options.type],
   }
 
-  // @ts-ignore give me a break...
-  return doPick(options)
+  return doPick(newOpts)
+}
+
+type DoPickParams<OS extends SupportedPlatforms> = DocumentPickerOptions<OS> & {
+  type: Array<PlatformTypes[OS][keyof PlatformTypes[OS]] | string>
+  allowMultiSelection: boolean
+  presentationStyle: NonNullable<ModalPropsIOS['presentationStyle']>
+  transitionStyle: TransitionStyle
 }
 
 function doPick<OS extends SupportedPlatforms>(
-  options: DocumentPickerOptions<OS> & {
-    type: Array<PlatformTypes[OS][keyof PlatformTypes[OS]] | string>
-    allowMultiSelection: boolean
-  },
+  options: DoPickParams<OS>,
 ): Promise<DocumentPickerResponse[]> {
   invariant(
     !('filetype' in options),
@@ -116,7 +107,6 @@ function doPick<OS extends SupportedPlatforms>(
   )
 
   invariant(
-    // @ts-ignore TS2345: Argument of type 'string' is not assignable to parameter of type 'PlatformTypes[OS][keyof PlatformTypes[OS]]'.
     !options.type.includes('folder'),
     'RN document picker: "folder" option was removed, use "pickDirectory()"',
   )
@@ -132,7 +122,7 @@ function doPick<OS extends SupportedPlatforms>(
     throw new TypeError('Invalid copyTo option: ' + options.copyTo)
   }
 
-  return RNDocumentPicker.pick(options)
+  return NativeDocumentPicker.pick(options)
 }
 
 export function releaseSecureAccess(uris: Array<string>): Promise<void> {
@@ -145,21 +135,36 @@ export function releaseSecureAccess(uris: Array<string>): Promise<void> {
     `"uris" should be an array of strings, was ${uris}`,
   )
 
-  return RNDocumentPicker.releaseSecureAccess(uris)
+  return NativeDocumentPicker.releaseSecureAccess(uris)
 }
 
 const E_DOCUMENT_PICKER_CANCELED = 'DOCUMENT_PICKER_CANCELED'
+const E_DOCUMENT_PICKER_IN_PROGRESS = 'ASYNC_OP_IN_PROGRESS'
 
-export function isCancel(err: Error & { code?: string }): boolean {
-  return err?.code === E_DOCUMENT_PICKER_CANCELED
+export type NativeModuleErrorShape = Error & { code?: string }
+
+export function isCancel(err: unknown): boolean {
+  return isErrorWithCode(err, E_DOCUMENT_PICKER_CANCELED)
+}
+
+export function isInProgress(err: unknown): boolean {
+  return isErrorWithCode(err, E_DOCUMENT_PICKER_IN_PROGRESS)
+}
+
+function isErrorWithCode(err: unknown, errorCode: string): boolean {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const nativeModuleErrorInstance = err as NativeModuleErrorShape
+    return nativeModuleErrorInstance?.code === errorCode
+  }
+  return false
 }
 
 export default {
   isCancel,
+  isInProgress,
   releaseSecureAccess,
   pickDirectory,
   pick,
-  pickMultiple,
   pickSingle,
   types,
   perPlatformTypes,
