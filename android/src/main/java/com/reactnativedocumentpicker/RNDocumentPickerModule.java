@@ -316,7 +316,6 @@ public class RNDocumentPickerModule extends NativeDocumentPickerSpec {
         if (fileName == null) {
           fileName = String.valueOf(System.currentTimeMillis());
         }
-        fileName = fileName.replaceAll(" ", "_");
         File destFile = safeGetDestination(new File(dir, fileName), dir.getCanonicalPath());
         Uri copyPath = copyFile(context, uri, destFile);
         map.putString(FIELD_FILE_COPY_URI, copyPath.toString());

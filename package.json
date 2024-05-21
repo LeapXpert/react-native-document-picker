@@ -12,10 +12,8 @@
     "lib",
     "android",
     "ios",
-    "windows",
     "cpp",
     "react-native-document-picker.podspec",
-    "!lib/typescript/example",
     "!android/build",
     "!ios/build",
     "!**/__tests__",
@@ -28,10 +26,8 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "prepare": "bob build",
     "release": "yarn prepare && release-it",
-    "pods": "cd example && pod-install --quiet",
     "bootstrap": "yarn && yarn pods",
     "start": "react-native start",
-    "windows": "react-native run-windows --sln example/windows/document-picker-example.sln",
     "android": "react-native run-android",
     "ios": "react-native run-ios"
   },
@@ -99,7 +95,6 @@
   "jest": {
     "preset": "react-native",
     "modulePathIgnorePatterns": [
-      "<rootDir>/example/node_modules",
       "<rootDir>/lib/"
     ]
   },
