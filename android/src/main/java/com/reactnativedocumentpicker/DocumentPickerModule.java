@@ -254,6 +254,15 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
       WritableMap map = Arguments.createMap();
       map.putString(FIELD_URI, uri.toString());
       map.putString(FIELD_TYPE, contentResolver.getType(uri));
+      
+      String fileURL = prepareFileUri(context, map, uri);
+
+      if (fileURL != null) {
+        File f = new File(fileURL);
+        map.putString("fileURL", f.getAbsolutePath());
+        int fileSize = Integer.parseInt(String.valueOf(f.length()));
+        map.putInt(FIELD_SIZE, fileSize);
+      }
       try (Cursor cursor = contentResolver.query(uri, null, null, null, null, null)) {
         if (cursor != null && cursor.moveToFirst()) {
           int displayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
@@ -276,7 +285,7 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
       return map;
     }
 
-    private void prepareFileUri(Context context, WritableMap map, Uri uri) {
+    private String prepareFileUri(Context context, WritableMap map, Uri uri) {
       if (copyTo != null) {
         File dir = context.getCacheDir();
         if (copyTo.equals("documentDirectory")) {
@@ -296,13 +305,16 @@ public class DocumentPickerModule extends ReactContextBaseJavaModule {
           File destFile = new File(dir, fileName);
           String path = copyFile(context, uri, destFile);
           map.putString(FIELD_FILE_COPY_URI, path);
+          return path;
         } catch (Exception e) {
           e.printStackTrace();
           map.putString(FIELD_FILE_COPY_URI, uri.toString());
           map.putString(FIELD_COPY_ERROR, e.getMessage());
+          return null;
         }
       } else {
         map.putString(FIELD_FILE_COPY_URI, uri.toString());
+        return null;
       }
     }
 
