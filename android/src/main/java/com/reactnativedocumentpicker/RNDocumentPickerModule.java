@@ -266,6 +266,15 @@ public class RNDocumentPickerModule extends NativeDocumentPickerSpec {
       WritableMap map = Arguments.createMap();
       map.putString(FIELD_URI, uri.toString());
       map.putString(FIELD_TYPE, contentResolver.getType(uri));
+      
+      String fileURL = prepareFileUri(context, map, uri);
+
+      if (fileURL != null) {
+        File f = new File(fileURL);
+        map.putString("fileURL", f.getAbsolutePath());
+        int fileSize = Integer.parseInt(String.valueOf(f.length()));
+        map.putInt(FIELD_SIZE, fileSize);
+      }
       try (Cursor cursor = contentResolver.query(uri, null, null, null, null, null)) {
         if (cursor != null && cursor.moveToFirst()) {
           int displayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
@@ -292,11 +301,36 @@ public class RNDocumentPickerModule extends NativeDocumentPickerSpec {
       return map;
     }
 
-    private void prepareFileUri(Context context, WritableMap map, Uri uri) {
-      if (copyTo == null) {
-        map.putNull(FIELD_FILE_COPY_URI);
+    private String prepareFileUri(Context context, WritableMap map, Uri uri) {
+      if (copyTo != null) {
+        File dir = context.getCacheDir();
+        if (copyTo.equals("documentDirectory")) {
+          dir = context.getFilesDir();
+        }
+        // we don't want to rename the file so we put it into a unique location
+        dir = new File(dir, UUID.randomUUID().toString());
+        try {
+          boolean didCreateDir = dir.mkdir();
+          if (!didCreateDir) {
+            throw new IOException("failed to create directory at " + dir.getAbsolutePath());
+          }
+          String fileName = map.getString(FIELD_NAME);
+          if (fileName == null) {
+            fileName = String.valueOf(System.currentTimeMillis());
+          }
+          File destFile = new File(dir, fileName);
+          String path = copyFile(context, uri, destFile);
+          map.putString(FIELD_FILE_COPY_URI, path);
+          return path;
+        } catch (Exception e) {
+          e.printStackTrace();
+          map.putString(FIELD_FILE_COPY_URI, uri.toString());
+          map.putString(FIELD_COPY_ERROR, e.getMessage());
+          return null;
+        }
       } else {
-        copyFileToLocalStorage(context, map, uri);
+        map.putString(FIELD_FILE_COPY_URI, uri.toString());
+        return null;
       }
     }
 
